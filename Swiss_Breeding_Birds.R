@@ -122,3 +122,64 @@ response1<-predict(model,newdata=newdata_bio14,type="response")
 
 plot(newdata_bio14$bio_14,response1,type="l")
 
+#---- Q3 ----
+#Which of the relationships is humped?
+#bio5 and 14
+
+#---- 4.2. Spatial Cross Validation ----
+#examining how well our model can predict presence/absence in different blocks
+#we're going to exclude a block from the frame to use as a training dataset which we'll fit the GLM to
+#there are only 5 blocks so we'll just do it for all#
+
+#first we will exclude spatial block 1.
+training1<-subset(ouzel_df,blockCV_tile!=1)
+#next we re-run the glm
+model1<-glm( Turdus_torquatus ~ bio_2 + I(bio_2^2) + bio_5 + I(bio_5^2) + bio_14 + I(bio_14^2), family='binomial', data=training1)
+#we will then subset the data for a testing data set and we will see how well the glm fitted to the other data does in predicting presences in this testing block
+testing<-subset(ouzel_df,blockCV_tile==1)
+predicted<-predict(model1,testing,type="response")
+#so here we have a prediction as a proportion rather than as a pres/abs.
+
+#The next step is to take different threshold values (i.e probability values at which we count a species as present or absent)
+thresholds<-seq(0,1,0.001)
+tpr<-c()
+fpr<-c()
+#We will then use a loop to consider the true positive and false positive rate at each threshold value
+for(x in 1:length(thresholds)){
+  
+  predicted.pres<-as.numeric(predicted>thresholds[x])
+  
+  present_correct<-length(which(predicted.pres*testing$Turdus_torquatus==1))
+  present_incorrect<-length(which(testing$Turdus_torquatus-predicted.pres==1))
+  tpr[x]<-present_correct/(present_correct+present_incorrect)
+  
+  absent_correct<-length(which(predicted.pres+testing$Turdus_torquatus==0))
+  absent_incorrect<-length(which(testing$Turdus_torquatus-predicted.pres==-1))
+  fpr[x]<-absent_incorrect/(absent_incorrect+absent_correct)
+  
+}
+
+#When we've run that we can plot the receiver operating characteristic (ROC) curve
+plot(fpr,tpr,xlab="false positive rate, 1-sensitivity",ylab="true positive rate, specificity",type="l")
+abline(0,1,lty=2)
+
+#Finally to calculate AUC, we can imagine lots of small rectangles. For each one we will calculate its areas and then the area under curve is the sum of those
+
+sortedvals<-cbind(fpr,tpr)[order(fpr),]
+
+AUC<-0
+for(x in 2:length(sortedvals[,1])){
+  AUC<-AUC+(sortedvals[x,1]-sortedvals[x-1,1])*sortedvals[x-1,2]}
+
+AUC
+
+bestthreshold <- thresholds[which.max(tpr+(1-fpr))]
+bestthreshold
+
+####repeat for other blocks later #####
+
+#---- Q4 ----
+#Which would be better for spatial validation, dividing grid cells into training and testing at random or dividing grid cells into spatial blocks?
+#spatial blocks  - represents extrapolation rather than interpolation
+
+#---- 5. Prediction ----
